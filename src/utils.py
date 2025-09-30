@@ -26,7 +26,7 @@ def parse_expiration(title):
     try:
         exp_date = datetime.strptime(date_str, "%b %d, %Y")
         dte = int(dte_str)
-        yte = dte / TRADINGDAYS  # fraction of trading year
+        yte = dte / TRADINGDAYS
         return [exp_date.strftime("%Y-%m-%d"), dte, round(yte, 4)]
     except ValueError:
         return None
@@ -61,10 +61,9 @@ def scrapeEntireChain(underlying, csvname):
                 continue
 
             exp_date, dte, yte = parsed
-            print(f"Scraping expiration {exp_date} (DTE={dte}, YTE={yte})")
+            print(f"src/utils.py :: Scraping expiration {exp_date} (DTE={dte}, YTE={yte})")
             btn.click() # Click button to load table
             time.sleep(3)  # wait for table to refresh
-            # TODO: Click button and scrape html table class '.table-jOonPmbB'
             table = WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, "table.table-jOonPmbB"))
             )
@@ -89,10 +88,17 @@ def scrapeEntireChain(underlying, csvname):
             df["Expiration"] = exp_date
             df["DTE"] = dte
             df["YTE"] = yte
-            df.replace("-", 0.0)
+            df = df.replace("-", "0").replace("–", "0")
+            # Convert only numeric columns (skip Expiration)
             for col in df.columns:
-                df[col] = pd.to_numeric(df[col].astype(str).str.replace(",", ""), errors="ignore")
-                
+                if col not in ["Expiration"]:
+                    df[col] = (
+                        df[col]
+                        .astype(str)
+                        .str.replace(",", "", regex=False)
+                    )
+                    df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+
             chain[exp_date] = df
 
         final_df = pd.concat(chain.values(), ignore_index=True)[TARGET_HEADERS]
