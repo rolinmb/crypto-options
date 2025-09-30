@@ -1,3 +1,4 @@
+from consts import DIRS
 from utils import scrapeEntireChain
 import sys
 import os
@@ -15,8 +16,9 @@ def startupRoutine():
         print(f"src/main.py :: Must enter 3 characters, you entered {sys.argv[1]}")
         sys.exit(1)
 
-    if not os.path.exists("data"):
-        os.makedirs("data")
+    for d in DIRS:
+        if not os.path.exists(d):
+            os.makedirs(d)
 
     return sys.argv[1].upper()
 

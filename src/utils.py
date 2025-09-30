@@ -1,6 +1,9 @@
-from consts import TVURL1, TVURL2, TRADINGDAYS
+from consts import TVURL1, TVURL2, TRADINGDAYS, TARGET_HEADERS
+import re
+import sys
 import time
 from datetime import datetime
+import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
@@ -13,14 +16,20 @@ OPTIONS.add_argument("--headless")
 OPTIONS.add_argument("--disable-gpu")
 OPTIONS.add_argument("--no-sandbox")
 
-def calc_yte(expiration_date, trading_days):
-    today = datetime.today()
-    delta_days = (expiration_date - today).days
-    if delta_days <= 0:
-        return 0.0
-    # Convert calendar days to trading days approximation
-    trading_days_left = delta_days * (trading_days / TRADINGDAYS)
-    return trading_days_left / trading_days  # fraction of a trading year
+def parse_expiration(title):
+    # Match "Sep 29, 2025 (123)"
+    match = re.match(r"([A-Za-z]{3} \d{1,2}, \d{4}) \((\d+)\)", title)
+    if not match:
+        return None
+    
+    date_str, dte_str = match.groups()
+    try:
+        exp_date = datetime.strptime(date_str, "%b %d, %Y")
+        dte = int(dte_str)
+        yte = dte / TRADINGDAYS  # fraction of trading year
+        return [exp_date.strftime("%Y-%m-%d"), dte, round(yte, 4)]
+    except ValueError:
+        return None
 
 
 def scrapeEntireChain(underlying, csvname):
@@ -38,21 +47,57 @@ def scrapeEntireChain(underlying, csvname):
         buttons = container.find_elements(By.CSS_SELECTOR, "button.item-XO65o9RZ")
         print("src/utils.py :: Successfully found expiration buttons")
 
-        expirations = []
+        chain = {}
         for btn in buttons:
+            df = None
             title = btn.get_attribute("title")
-            if title:
-                date_str = " ".join(title.split()[:3])  # e.g. "Sep 29, 2025"
-                try:
-                    parsed = datetime.strptime(date_str, "%b %d, %Y")
-                    yte = calc_yte(parsed)
-                    expirations.append((parsed.strftime("%Y-%m-%d"), round(yte, 4)))
-                except ValueError:
-                    pass
+            if not title:
+                print("src/utils.py :: Error parsing button title; skipping")
+                continue
 
-        print("src/utils.py :: Parsed expirations (with YTE):")
-        for exp, yte in expirations:
-            print(f" - {exp} | YTE={yte}")
+            parsed = parse_expiration(title)
+            if not parsed:
+                print("src/utils.py :: Error parsing expiration date; skipping")
+                continue
+
+            exp_date, dte, yte = parsed
+            print(f"Scraping expiration {exp_date} (DTE={dte}, YTE={yte})")
+            btn.click() # Click button to load table
+            time.sleep(3)  # wait for table to refresh
+            # TODO: Click button and scrape html table class '.table-jOonPmbB'
+            table = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "table.table-jOonPmbB"))
+            )
+            headers = [th.text.strip() for th in table.find_elements(By.CSS_SELECTOR, "thead tr th")]
+            headers = headers[3:]
+            rows = []
+            for tr in table.find_elements(By.CSS_SELECTOR, "tbody tr"):
+                tds = tr.find_elements(By.TAG_NAME, "td")
+                try:
+                    cells = [td.text.strip() for td in tds]
+                    if not cells:
+                        continue
+                    meaningful = [c for c in cells if c not in ("", "-")]
+                    if len(meaningful) < 5:
+                        continue
+                    rows.append(cells)
+                except Exception as e:
+                    print(f"src/utils.py :: Error parsing td cells: {e}")
+                    sys.exit(1)
+
+            df = pd.DataFrame(rows, columns=TARGET_HEADERS[:-3])
+            df["Expiration"] = exp_date
+            df["DTE"] = dte
+            df["YTE"] = yte
+            df.replace("-", 0.0)
+            for col in df.columns:
+                df[col] = pd.to_numeric(df[col].astype(str).str.replace(",", ""), errors="ignore")
+                
+            chain[exp_date] = df
+
+        final_df = pd.concat(chain.values(), ignore_index=True)[TARGET_HEADERS]
+        final_df.to_csv(csvname, index=False)
+        print(f"src/utils.py :: Successfully saved {underlying} futures option chain to {csvname}")
     finally:
         driver.quit()
 
