@@ -9,6 +9,12 @@ TARGET_HEADERS = [
     "pTime value","pIntr. value","pAsk IV, %","pBid IV, %",
     "Expiration","DTE","YTE"
 ]
+MODES = [
+    "cBid IV, %","cAsk IV, %","cIntr. value","cTime value","cRho","cVega","cTheta","cGamma","cDelta",
+    "cPrice","cAsk","cBid","cVolume",
+    "pVolume","pBid","pAsk","pPrice","pDelta","pGamma","pTheta","pVega","pRho",
+    "pTime value","pIntr. value","pAsk IV, %","pBid IV, %"
+]
 DIRS = ["data", "img"]
 
 if __name__ == "__main__":

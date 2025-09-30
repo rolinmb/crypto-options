@@ -1,5 +1,5 @@
-from consts import DIRS
-from utils import scrapeEntireChain
+from consts import DIRS, MODES
+from utils import scrapeEntireChain, createSurfacePlot
 import sys
 import os
 
@@ -24,4 +24,6 @@ def startupRoutine():
 
 if __name__ == "__main__":
     asset = startupRoutine()
-    scrapeEntireChain(asset, f"data/{asset}chain.csv")
+    #scrapeEntireChain(asset, f"data/{asset}chain.csv")
+    for mode in MODES:
+        createSurfacePlot(asset, f"data/{asset}chain.csv", mode, f"img/{asset}{mode}.png")

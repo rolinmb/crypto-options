@@ -3,7 +3,10 @@ import re
 import sys
 import time
 from datetime import datetime
+import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
@@ -106,6 +109,36 @@ def scrapeEntireChain(underlying, csvname):
         print(f"src/utils.py :: Successfully saved {underlying} futures option chain to {csvname}")
     finally:
         driver.quit()
+
+def createSurfacePlot(underlying, csvname, mode, pngname):
+    chain = pd.read_csv(csvname)
+    if mode not in chain.columns:
+        raise ValueError(f"Mode '{mode}' not found in CSV columns. Available: {list(chain.columns)}")
+
+    strikes = chain["Strike"].values
+    ytes = chain["YTE"].values
+    zvals = chain[mode].values
+    unique_strikes = np.unique(strikes)
+    unique_ytes = np.unique(ytes)
+    X, Y = np.meshgrid(unique_strikes, unique_ytes)
+    Z = np.full_like(X, np.nan, dtype=float)
+    for s, y, z in zip(strikes, ytes, zvals):
+        i = np.where(unique_ytes == y)[0][0]
+        j = np.where(unique_strikes == s)[0][0]
+        Z[i, j] = z
+
+    fig = plt.figure(figsize=(10, 7))
+    ax = fig.add_subplot(111, projection="3d")
+    surf = ax.plot_surface(X, Y, Z, cmap="viridis", edgecolor="k", linewidth=0.5, antialiased=True)
+    ax.set_xlabel("Strike")
+    ax.set_ylabel("Years to Expiration (YTE)")
+    ax.set_zlabel(mode)
+    ax.set_title(f"{underlying} {mode} Surface")
+    fig.colorbar(surf, shrink=0.5, aspect=10, label=mode)
+    plt.tight_layout()
+    plt.savefig(pngname, dpi=150)
+    plt.close()
+    print(f"src/utils.py :: Successfully created surface plot {pngname}")
 
 if __name__ == "__main__":
     pass
